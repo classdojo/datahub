@@ -271,7 +271,7 @@ pytz==2024.1
 PyYAML==6.0.1
 pyzmq==24.0.1
 redash-toolbelt==0.1.9
-redshift-connector==2.1.1
+redshift-connector==2.0.917
 referencing==0.35.0
 regex==2024.4.16
 requests==2.31.0
