@@ -2,15 +2,12 @@ import json
 import logging
 import os
 import os.path
-import sys
 import typing
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import click
 import requests
-from deprecated import deprecated
-from requests.models import Response
 from requests.sessions import Session
 
 from datahub.cli import config_utils
@@ -22,44 +19,12 @@ from datahub.utilities.urns.urn import Urn, guess_entity_type
 
 log = logging.getLogger(__name__)
 
-ENV_METADATA_HOST_URL = "DATAHUB_GMS_URL"
-ENV_METADATA_HOST = "DATAHUB_GMS_HOST"
-ENV_METADATA_PORT = "DATAHUB_GMS_PORT"
-ENV_METADATA_PROTOCOL = "DATAHUB_GMS_PROTOCOL"
-ENV_METADATA_TOKEN = "DATAHUB_GMS_TOKEN"
 ENV_DATAHUB_SYSTEM_CLIENT_ID = "DATAHUB_SYSTEM_CLIENT_ID"
 ENV_DATAHUB_SYSTEM_CLIENT_SECRET = "DATAHUB_SYSTEM_CLIENT_SECRET"
-
-config_override: Dict = {}
 
 # TODO: Many of the methods in this file duplicate logic that already lives
 # in the DataHubGraph client. We should refactor this to use the client instead.
 # For the methods that aren't duplicates, that logic should be moved to the client.
-
-
-def set_env_variables_override_config(url: str, token: Optional[str]) -> None:
-    """Should be used to override the config when using rest emitter"""
-    config_override[ENV_METADATA_HOST_URL] = url
-    if token is not None:
-        config_override[ENV_METADATA_TOKEN] = token
-
-
-def get_details_from_env() -> Tuple[Optional[str], Optional[str]]:
-    host = os.environ.get(ENV_METADATA_HOST)
-    port = os.environ.get(ENV_METADATA_PORT)
-    token = os.environ.get(ENV_METADATA_TOKEN)
-    protocol = os.environ.get(ENV_METADATA_PROTOCOL, "http")
-    url = os.environ.get(ENV_METADATA_HOST_URL)
-    if port is not None:
-        url = f"{protocol}://{host}:{port}"
-        return url, token
-    # The reason for using host as URL is backward compatibility
-    # If port is not being used we assume someone is using host env var as URL
-    if url is None and host is not None:
-        log.warning(
-            f"Do not use {ENV_METADATA_HOST} as URL. Use {ENV_METADATA_HOST_URL} instead"
-        )
-    return url or host, token
 
 
 def first_non_null(ls: List[Optional[str]]) -> Optional[str]:

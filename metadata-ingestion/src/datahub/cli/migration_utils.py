@@ -1,6 +1,6 @@
 import logging
 import uuid
-from typing import Dict, Iterable, List
+from typing import Iterable, List
 
 from avrogen.dict_wrapper import DictWrapper
 
@@ -243,8 +243,13 @@ def clone_aspect(
     run_id: str = str(uuid.uuid4()),
     dry_run: bool = False,
 ) -> Iterable[MetadataChangeProposalWrapper]:
+    client = get_default_graph()
     aspect_map = cli_utils.get_aspects_for_entity(
-        entity_urn=src_urn, aspects=aspect_names, typed=True
+        client._session,
+        client.config.server,
+        entity_urn=src_urn,
+        aspects=aspect_names,
+        typed=True,
     )
 
     if aspect_names is not None:

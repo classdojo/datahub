@@ -4,6 +4,7 @@ import functools
 import json
 import logging
 import os
+import sys
 import textwrap
 import time
 from dataclasses import dataclass
@@ -27,7 +28,6 @@ from avro.schema import RecordSchema
 from deprecated import deprecated
 from pydantic import BaseModel, ValidationError
 from requests.models import HTTPError
-from requests.sessions import Session
 
 from datahub.cli import config_utils
 from datahub.configuration.common import ConfigModel, GraphError, OperationalError
@@ -83,7 +83,10 @@ _MISSING_SERVER_ID = "missing"
 _GRAPH_DUMMY_RUN_ID = "__datahub-graph-client"
 
 ENV_METADATA_HOST_URL = "DATAHUB_GMS_URL"
+ENV_METADATA_TOKEN = "DATAHUB_GMS_TOKEN"
 ENV_METADATA_HOST = "DATAHUB_GMS_HOST"
+ENV_METADATA_PORT = "DATAHUB_GMS_PORT"
+ENV_METADATA_PROTOCOL = "DATAHUB_GMS_PROTOCOL"
 
 
 class DatahubClientConfig(ConfigModel):
@@ -548,8 +551,8 @@ class DataHubGraph(DatahubRestEmitter):
     def _aspect_count_endpoint(self):
         return f"{self.config.server}/aspects?action=getCount"
 
-    def _session(self) -> Session:
-        return super()._session
+    # def _session(self) -> Session:
+    #    return super()._session
 
     def get_domain_urn_by_name(self, domain_name: str) -> Optional[str]:
         """Retrieve a domain urn based on its name. Returns None if there is no match found"""
@@ -1201,14 +1204,44 @@ class DatahubConfig(BaseModel):
     gms: DatahubClientConfig
 
 
+config_override: Dict = {}
+
+
+def set_env_variables_override_config(url: str, token: Optional[str]) -> None:
+    """Should be used to override the config when using rest emitter"""
+    config_override[ENV_METADATA_HOST_URL] = url
+    if token is not None:
+        config_override[ENV_METADATA_TOKEN] = token
+
+
+def get_details_from_env() -> Tuple[Optional[str], Optional[str]]:
+    host = os.environ.get(ENV_METADATA_HOST)
+    port = os.environ.get(ENV_METADATA_PORT)
+    token = os.environ.get(ENV_METADATA_TOKEN)
+    protocol = os.environ.get(ENV_METADATA_PROTOCOL, "http")
+    url = os.environ.get(ENV_METADATA_HOST_URL)
+    if port is not None:
+        url = f"{protocol}://{host}:{port}"
+        return url, token
+    # The reason for using host as URL is backward compatibility
+    # If port is not being used we assume someone is using host env var as URL
+    if url is None and host is not None:
+        logger.warning(
+            f"Do not use {ENV_METADATA_HOST} as URL. Use {ENV_METADATA_HOST_URL} instead"
+        )
+    return url or host, token
+
+
 def load_client_config() -> DatahubClientConfig:
     try:
         ensure_datahub_config()
-        client_config_dict = config_utils.get_client_config(as_dict=True)
+        client_config_dict = config_utils.get_client_config()
         datahub_config = DatahubConfig.parse_obj(client_config_dict).gms
         return datahub_config
     except ValidationError as e:
-        click.echo(f"Received error, please check your {CONDENSED_DATAHUB_CONFIG_PATH}")
+        click.echo(
+            f"Received error, please check your {config_utils.CONDENSED_DATAHUB_CONFIG_PATH}"
+        )
         click.echo(e, err=True)
         sys.exit(1)
 
@@ -1243,7 +1276,7 @@ def write_gms_config(
     config = DatahubConfig(gms=DatahubClientConfig(server=host, token=token))
     if merge_with_previous:
         try:
-            previous_config = config_utils.get_client_config(as_dict=True)
+            previous_config = config_utils.get_client_config()
             assert isinstance(previous_config, dict)
         except Exception as e:
             # ok to fail on this

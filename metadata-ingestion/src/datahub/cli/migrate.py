@@ -1,3 +1,4 @@
+import json
 import logging
 import random
 import uuid
@@ -7,7 +8,7 @@ import click
 import progressbar
 from avrogen.dict_wrapper import DictWrapper
 
-from datahub.cli import delete_cli, migration_utils
+from datahub.cli import cli_utils, delete_cli, migration_utils
 from datahub.emitter.mce_builder import (
     DEFAULT_ENV,
     dataset_urn_to_key,
@@ -23,7 +24,11 @@ from datahub.emitter.mcp_builder import (
     SchemaKey,
 )
 from datahub.emitter.rest_emitter import DatahubRestEmitter
-from datahub.ingestion.graph.client import DataHubGraph, get_default_graph
+from datahub.ingestion.graph.client import (
+    DataHubGraph,
+    RelatedEntity,
+    get_default_graph,
+)
 from datahub.metadata.schema_classes import (
     ContainerKeyClass,
     ContainerPropertiesClass,
@@ -31,6 +36,7 @@ from datahub.metadata.schema_classes import (
     SystemMetadataClass,
 )
 from datahub.telemetry import telemetry
+from datahub.utilities.urns.urn import Urn
 
 log = logging.getLogger(__name__)
 
@@ -143,7 +149,7 @@ def dataplatform2instance_func(
 
     graph = get_default_graph()
 
-    urns_to_migrate = []
+    urns_to_migrate: List[str] = []
 
     # we first calculate all the urns we will be migrating
     for src_entity_urn in graph.get_urns_by_filter(platform=platform, env=env):
@@ -151,7 +157,9 @@ def dataplatform2instance_func(
         assert key
         # Does this urn already have a platform instance associated with it?
         response = graph.get_aspects_for_entity(
-            entity_urn=src_entity_urn, aspects=["dataPlatformInstance"], typed=True
+            entity_urn=src_entity_urn,
+            aspects=["dataPlatformInstance"],
+            aspect_types=[DataPlatformInstanceClass],
         )
         if "dataPlatformInstance" in response:
             assert isinstance(
@@ -235,8 +243,8 @@ def dataplatform2instance_func(
             aspect_name = migration_utils.get_aspect_name_from_relationship(
                 relationshipType, entity_type
             )
-            aspect_map = graph.get_aspects_for_entity(
-                target_urn, aspects=[aspect_name], typed=True
+            aspect_map = cli_utils.get_aspects_for_entity(
+                graph._session, graph.config.server, target_urn, aspects=[aspect_name]
             )
             if aspect_name in aspect_map:
                 aspect = aspect_map[aspect_name]
@@ -434,23 +442,29 @@ def process_container_relationships(
     migration_report: MigrationReport,
     rest_emitter: DatahubRestEmitter,
 ) -> None:
-    relationships = migration_utils.get_incoming_relationships(urn=src_urn)
+    relationships: Iterable[RelatedEntity] = migration_utils.get_incoming_relationships(
+        urn=src_urn
+    )
     client = get_default_graph()
     for relationship in relationships:
         log.debug(f"Incoming Relationship: {relationship}")
-        target_urn = relationship.urn
+        target_urn: str = relationship.urn
 
         # We should use the new id if we already migrated it
         if target_urn in container_id_map:
-            target_urn = container_id_map.get(target_urn)
+            target_urn = container_id_map[target_urn]
 
         entity_type = _get_type_from_urn(target_urn)
         relationshipType = relationship.relationship_type
         aspect_name = migration_utils.get_aspect_name_from_relationship(
             relationshipType, entity_type
         )
-        aspect_map = client.get_aspects_for_entity(
-            target_urn, aspects=[aspect_name], typed=True
+        aspect_map = cli_utils.get_aspects_for_entity(
+            client._session,
+            client.config.server,
+            target_urn,
+            aspects=[aspect_name],
+            typed=True,
         )
         if aspect_name in aspect_map:
             aspect = aspect_map[aspect_name]

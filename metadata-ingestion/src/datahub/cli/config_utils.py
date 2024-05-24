@@ -4,8 +4,7 @@ For helper methods to contain manipulation of the config file in local system.
 
 import logging
 import os
-import sys
-from typing import Optional, Union
+from typing import Optional
 
 import click
 import yaml
@@ -31,12 +30,10 @@ def should_skip_config() -> bool:
     return get_boolean_env_variable(ENV_SKIP_CONFIG, False)
 
 
-def get_client_config(as_dict: bool = True) -> dict:
+def get_client_config() -> Optional[dict]:
     with open(DATAHUB_CONFIG_PATH, "r") as stream:
         try:
             return yaml.safe_load(stream)
-            if as_dict:
-                return config_json
         except yaml.YAMLError as exc:
             click.secho(f"{DATAHUB_CONFIG_PATH} malformed, error: {exc}", bold=True)
             return None

@@ -65,7 +65,7 @@ def get_timeline(
 ) -> Any:
     client = get_default_graph()
     session = client._session
-    gms_host = client.config.server
+    host = client.config.server
     if urn.startswith("urn%3A"):
         # we assume the urn is already encoded
         encoded_urn: str = urn
